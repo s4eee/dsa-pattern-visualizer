@@ -1,8 +1,10 @@
 import os
 import json
+import re
+import sqlite3
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
-from openai import OpenAI  # Switched to the standard OpenAI client layout
+from openai import OpenAI
 from database import init_db, save_analysis
 
 load_dotenv()
@@ -10,7 +12,6 @@ load_dotenv()
 app = Flask(__name__)
 init_db()
 
-# INITIALIZATION: Connects to OpenRouter using their universal base URL endpoint
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ.get("OPENROUTER_API_KEY")
@@ -19,7 +20,6 @@ client = OpenAI(
 @app.route('/')
 def home():
     return render_template('index.html')
-
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze_code():
@@ -30,7 +30,6 @@ def analyze_code():
         return jsonify({"status": "error", "message": "Code snippet cannot be empty!"}), 400
 
     try:
-        # We instruct the AI to return the pattern, explanation, and 3 real LeetCode questions with URLs
         prompt = f"""
         Analyze the following programming code snippet and identify its primary Data Structures & Algorithms (DSA) core structural pattern (e.g., Two Pointers, Sliding Window, Fast and Slow Pointers, Merge Intervals, Breadth-First Search, Depth-First Search, etc.).
 
@@ -64,23 +63,28 @@ def analyze_code():
         {user_code}
         """
 
+        # FIX: Added max_tokens guardrail to fit within OpenRouter free token allocation limits
         response = client.chat.completions.create(
-            model="openrouter/free",
-            messages=[{"role": "user", "content": prompt}]
+            model="google/gemini-2.5-flash",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=800,
+            timeout=15.0
         )
         
-        # Clean up any accidental wrapping strings if the LLM adds them
-        ai_response = response.choices[0].message.content.strip()
-        if ai_response.startswith("```json"):
-            ai_response = ai_response.replace("```json", "", 1)
-        if ai_response.endswith("```"):
-            ai_response = ai_response.rstrip("```")
-        
-        # Parse the raw text into a real Python dictionary
-        result_data = json.loads(ai_response.strip())
+        raw_content = response.choices[0].message.content.strip()
 
-        # DATABASE LOGGING (Keeps your history tracker intact!)
-        save_analysis(user_code, result_data.get("pattern", "Unknown"))
+        match = re.search(r'\{.*\}', raw_content, re.DOTALL)
+        if match:
+            clean_json_str = match.group(0)
+        else:
+            raise ValueError("No valid JSON structure found in the AI response.")
+        
+        result_data = json.loads(clean_json_str)
+
+        try:
+            save_analysis(user_code, result_data.get("pattern", "Unknown"))
+        except Exception as db_err:
+            print(f"Database Save Warning: {db_err}")
         
         return jsonify({
             "status": "success",
@@ -90,8 +94,53 @@ def analyze_code():
         })
 
     except Exception as e:
-        print(f"Error during execution: {e}")
-        return jsonify({"status": "error", "message": "Failed to parse or analyze code structure."}), 500
-# THIS MUST BE FLUSHED TO THE LEFT MARGIN BELOW ALL FUNCTIONS TO BOOT THE APP
+        print(f"💥 Error during execution lifecycle: {e}")
+        return jsonify({"status": "error", "message": f"Failed to parse structure: {str(e)}"}), 500
+
+
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    try:
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(base_dir, 'dsa_tool.db')
+        conn = sqlite3.connect('dsa_tool.db')
+        cursor = conn.cursor()
+        
+        # SAFETY CHECK: Ensure table exists so an empty database doesn't crash the frontend
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS analysis_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                code_snippet TEXT,
+                detected_pattern TEXT
+            )
+        ''')
+        
+        cursor.execute('''
+            SELECT id, timestamp, code_snippet, detected_pattern 
+            FROM analysis_history 
+            ORDER BY timestamp DESC LIMIT 10
+        ''')
+        
+        rows = cursor.fetchall()
+        print(f"📦 DEBUG DATABASE FETCH: Found {len(rows)} rows in SQLite.") # <-- ADD THIS LINE
+        
+        conn.close()
+        
+        history_list = []
+        for row in rows:
+            history_list.append({
+                "id": row[0],
+                "timestamp": row[1],
+                "code": row[2],
+                "pattern": row[3]
+            })
+            
+        return jsonify({"status": "success", "history": history_list})
+    except Exception as e:
+        print(f"Database Query Error: {e}")
+        return jsonify({"status": "error", "message": "Failed to load historical analytics."}), 500
+
 if __name__ == "__main__":
     app.run(debug=True)

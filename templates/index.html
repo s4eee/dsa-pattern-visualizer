@@ -59,9 +59,70 @@
             <div id="question-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 </div>
         </section>
+
+        <section class="lg:col-span-2 bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-indigo-400 font-bold text-lg">📜 Past Analyses History</h3>
+                    <p class="text-gray-400 text-xs mt-1">Review your previously submitted algorithms and detected structural patterns stored in SQL.</p>
+                </div>
+                <button onclick="loadHistoryLog()" class="text-xs bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-300 px-4 py-2 rounded-lg border border-indigo-700 transition-all active:scale-95">
+                    🔄 Refresh Log
+                </button>
+            </div>
+            
+            <div id="history-log-list" class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                <p class="text-gray-500 text-xs italic">Loading local history records...</p>
+            </div>
+        </section>
     </main>
 
     <script>
+        // FETCH AND RENDER SQL DATABASE ANALYSIS HISTORY
+        async function loadHistoryLog() {
+            const logList = document.getElementById('history-log-list');
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                
+                if (response.ok && data.history && data.history.length > 0) {
+                    logList.innerHTML = ''; // Wipe clean previous entries
+                    
+                    data.history.forEach(item => {
+                        const cardRow = document.createElement('div');
+                        cardRow.className = "flex justify-between items-center bg-gray-900 border border-gray-800/80 p-3.5 rounded-lg hover:border-indigo-500/30 transition-all text-xs group";
+                        
+                        // Grab just the first line of the code snippet for a clean preview line
+                        const firstLine = item.code.trim().split('\n')[0];
+                        const codePreview = firstLine.length > 45 ? firstLine.substring(0, 45) + "..." : firstLine;
+                        
+                        cardRow.innerHTML = `
+                            <div class="flex flex-col gap-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-emerald-400 tracking-wide">${item.pattern}</span>
+                                    <span class="text-[10px] text-gray-600 font-mono">ID: #${item.id}</span>
+                                </div>
+                                <code class="text-gray-400 font-mono text-[11px] bg-gray-950/50 px-2 py-0.5 rounded border border-gray-800/40 inline-block w-fit group-hover:text-gray-200 transition-colors">${codePreview}</code>
+                            </div>
+                            <div class="text-right text-gray-500 text-[10px] font-medium tracking-tight">
+                                📅 ${item.timestamp}
+                            </div>
+                        `;
+                        logList.appendChild(cardRow);
+                    });
+                } else {
+                    logList.innerHTML = `
+                        <div class="text-center py-4 text-gray-600 text-xs italic">
+                            No patterns analyzed yet. Paste a script above to seed your database tracker!
+                        </div>`;
+                }
+            } catch (err) {
+                console.error("Critical failure during logs retrieval pipeline:", err);
+                logList.innerHTML = `<p class="text-rose-500 text-xs">Error parsing analysis dashboard logs.</p>`;
+            }
+        }
+
+        // PRIMARY FORM SUBMISSION OVERLAY HANDLER
         document.getElementById('analyzeBtn').addEventListener('click', async () => {
             const codeInput = document.getElementById('codeArea').value;
             const patternDisplay = document.getElementById('patternResult');
@@ -137,6 +198,10 @@
                     } else {
                         practiceContainer.style.display = "none";
                     }
+
+                    // 4. Auto-refresh history log entries immediately on successful code submit
+                    loadHistoryLog();
+
                 } else {
                     alert(data.message || "An error occurred during engine analysis lifecycle.");
                 }
@@ -149,6 +214,9 @@
                 btn.disabled = false;
             }
         });
+
+        // AUTO-TRIGGER LOG RETRIEVAL INITIALIZATION ON PAGE LOAD
+        window.addEventListener('DOMContentLoaded', loadHistoryLog);
     </script>
 </body>
 </html>
