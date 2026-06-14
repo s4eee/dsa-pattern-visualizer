@@ -23,8 +23,8 @@
                 <p class="text-gray-400 text-sm mb-4">Paste your code algorithm below to decode its underlying DSA pattern.</p>
                 
                 <textarea id="codeArea" 
-                    class="w-full h-80 bg-gray-900 text-mono text-emerald-400 p-4 rounded-lg border border-gray-700 focus:outline-none focus:border-indigo-500 font-mono text-sm resize-none"
-                    placeholder="def find_max_sum(arr, k):&#10;    # Paste your logic here..."></textarea>
+                    class="w-full h-80 bg-gray-900 text-emerald-400 p-4 rounded-lg border border-gray-700 focus:outline-none focus:border-indigo-500 font-mono text-sm resize-none"
+                    placeholder="public class Solution {&#10;    public boolean hasTargetSum(int[] nums, int target) {&#10;        // Paste your logic here..."></textarea>
             </div>
             
             <button id="analyzeBtn" 
@@ -34,18 +34,30 @@
         </section>
 
         <section class="flex flex-col gap-6">
-            
-            <div class="bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl min-h-[180px]">
+            <div class="bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl min-h-[110px]">
                 <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-wider mb-2">Detected Pattern</h3>
                 <div id="patternResult" class="text-2xl font-bold text-gray-500 italic">No code analyzed yet</div>
             </div>
 
             <div class="bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl flex-1">
                 <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-wider mb-2">AI Insights & Breakdown</h3>
-                <p id="explanationResult" class="text-gray-400 text-sm leading-relaxed">
+                <p id="explanationResult" class="text-gray-400 text-sm leading-relaxed text-gray-500 italic">
                     Submit code to see the step-by-step structural explanation, logic mapping, and optimization strategies.
                 </p>
             </div>
+        </section>
+
+        <section id="practice-container" class="lg:col-span-2 bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl" style="display: none;">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-indigo-400 font-bold text-lg">🎯 Recommended Practice Arena</h3>
+                    <p class="text-gray-400 text-xs mt-1">Master this pattern by taking on these curated algorithmic challenges.</p>
+                </div>
+                <span class="text-xs bg-emerald-950/50 text-emerald-400 px-3 py-1 rounded-full border border-emerald-800 font-semibold tracking-wide">Pattern Match Locked</span>
+            </div>
+
+            <div id="question-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                </div>
         </section>
     </main>
 
@@ -54,10 +66,18 @@
             const codeInput = document.getElementById('codeArea').value;
             const patternDisplay = document.getElementById('patternResult');
             const explanationDisplay = document.getElementById('explanationResult');
+            const practiceContainer = document.getElementById('practice-container');
+            const cardsGrid = document.getElementById('question-cards-grid');
             const btn = document.getElementById('analyzeBtn');
 
-            // UI UX: Simple loading state indicator
-            btn.innerText = "Analyzing Code...";
+            // Defensive Check: Don't allow empty payloads
+            if (!codeInput.trim()) {
+                alert("Please paste some code logic first before executing analysis!");
+                return;
+            }
+
+            // Enter loading state configurations
+            btn.innerText = "Analyzing Code Base Structure...";
             btn.disabled = true;
 
             try {
@@ -70,18 +90,61 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // Update UI elements dynamically
+                    // 1. Unveil metrics metadata inside top panels
                     patternDisplay.innerText = data.pattern;
                     patternDisplay.className = "text-3xl font-extrabold text-emerald-400 tracking-wide";
+                    
                     explanationDisplay.innerText = data.explanation;
                     explanationDisplay.className = "text-gray-200 text-sm leading-relaxed";
+
+                    // 2. Wipe clean any previous question grid items
+                    cardsGrid.innerHTML = ''; 
+
+                    // 3. Loop and render new structural challenge components dynamically
+                    if (data.questions && data.questions.length > 0) {
+                        data.questions.forEach(q => {
+                            // Assign beautiful badge design properties based on algorithmic difficulties
+                            let diffBadgeColor = "bg-emerald-950 text-emerald-400 border-emerald-800";
+                            if (q.difficulty.toLowerCase() === 'medium') {
+                                diffBadgeColor = "bg-amber-950 text-amber-400 border-amber-800";
+                            } else if (q.difficulty.toLowerCase() === 'hard') {
+                                diffBadgeColor = "bg-rose-950 text-rose-400 border-rose-800";
+                            }
+
+                            // Dynamic url compilation safety net
+                            const targetUrl = q.url ? q.url : `https://leetcode.com/problemset/all/?search=${encodeURIComponent(q.title)}`;
+
+                            const card = document.createElement('div');
+                            card.className = "bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg flex flex-col justify-between hover:border-indigo-500/50 transition-all duration-300";
+                            
+                            card.innerHTML = `
+                                <div>
+                                    <div class="flex justify-between items-start gap-2 mb-3">
+                                        <h4 class="font-bold text-gray-100 text-base leading-tight">${q.title}</h4>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border font-medium tracking-wide ${diffBadgeColor}">${q.difficulty}</span>
+                                    </div>
+                                    <p class="text-gray-400 text-xs leading-relaxed mb-4">${q.description}</p>
+                                </div>
+                                <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="w-full text-center bg-gray-800 hover:bg-indigo-600 text-gray-200 hover:text-white text-xs font-medium py-2 rounded-lg transition-all block active:scale-[0.98]">
+                                    Accept Challenge ⚔️
+                                </a>
+                            `;
+                            cardsGrid.appendChild(card);
+                        });
+
+                        // Make the practice panel completely visible via block layout rules
+                        practiceContainer.style.display = "block";
+                    } else {
+                        practiceContainer.style.display = "none";
+                    }
                 } else {
-                    alert(data.message || "Something went wrong.");
+                    alert(data.message || "An error occurred during engine analysis lifecycle.");
                 }
             } catch (error) {
-                console.error("Error:", error);
-                alert("Could not connect to backend server.");
+                console.error("Network Error Connection Context:", error);
+                alert("Could not connect to backend server. Make sure your Flask local port loop is active.");
             } finally {
+                // Restore standard form trigger interface settings
                 btn.innerText = "Analyze with AI 🚀";
                 btn.disabled = false;
             }

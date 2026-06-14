@@ -1,4 +1,5 @@
 import os
+import json
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from openai import OpenAI  # Switched to the standard OpenAI client layout
@@ -19,6 +20,7 @@ client = OpenAI(
 def home():
     return render_template('index.html')
 
+
 @app.route('/api/analyze', methods=['POST'])
 def analyze_code():
     data = request.get_json()
@@ -28,50 +30,68 @@ def analyze_code():
         return jsonify({"status": "error", "message": "Code snippet cannot be empty!"}), 400
 
     try:
+        # We instruct the AI to return the pattern, explanation, and 3 real LeetCode questions with URLs
         prompt = f"""
         Analyze the following programming code snippet and identify its primary Data Structures & Algorithms (DSA) core structural pattern (e.g., Two Pointers, Sliding Window, Fast and Slow Pointers, Merge Intervals, Breadth-First Search, Depth-First Search, etc.).
 
-        Provide your response strictly in the following format:
-        PATTERN: [Name of the Pattern]
-        EXPLANATION: [A brief 2-3 sentence clear explanation of why this pattern applies and how it operates within the context of the provided code snippet.]
+        You must respond STRICTLY with a valid JSON object. Do not include any markdown formatting, backticks, or 'json' tags. Match this exact structural schema:
+        {{
+            "pattern": "Name of the DSA Pattern",
+            "explanation": "A clear 2-sentence explanation of why this pattern applies to this code.",
+            "practice_questions": [
+                {{
+                    "title": "Question Title 1",
+                    "difficulty": "Easy",
+                    "description": "Brief 1-sentence prompt of what the problem asks to solve.",
+                    "url": "https://leetcode.com/problems/problem-slug-1/"
+                }},
+                {{
+                    "title": "Question Title 2",
+                    "difficulty": "Medium",
+                    "description": "Brief 1-sentence prompt of what the problem asks to solve.",
+                    "url": "https://leetcode.com/problems/problem-slug-2/"
+                }},
+                {{
+                    "title": "Question Title 3",
+                    "difficulty": "Hard",
+                    "description": "Brief 1-sentence prompt of what the problem asks to solve.",
+                    "url": "https://leetcode.com/problems/problem-slug-3/"
+                }}
+            ]
+        }}
 
-        Code Snippet:
+        Code Snippet to analyze:
         {user_code}
         """
 
-        # Call OpenRouter using the free multi-model routing tier
         response = client.chat.completions.create(
             model="openrouter/free",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
         
-        ai_response = response.choices[0].message.content
+        # Clean up any accidental wrapping strings if the LLM adds them
+        ai_response = response.choices[0].message.content.strip()
+        if ai_response.startswith("```json"):
+            ai_response = ai_response.replace("```json", "", 1)
+        if ai_response.endswith("```"):
+            ai_response = ai_response.rstrip("```")
         
-        # Parse formatting rules
-        lines = ai_response.strip().split("\n")
-        detected_pattern = "Unknown Pattern"
-        explanation = ai_response
+        # Parse the raw text into a real Python dictionary
+        result_data = json.loads(ai_response.strip())
 
-        for line in lines:
-            if line.startswith("PATTERN:"):
-                detected_pattern = line.replace("PATTERN:", "").strip()
-            elif line.startswith("EXPLANATION:"):
-                explanation = line.replace("EXPLANATION:", "").strip()
-
-        # Database logging
-        save_analysis(user_code, detected_pattern)
+        # DATABASE LOGGING (Keeps your history tracker intact!)
+        save_analysis(user_code, result_data.get("pattern", "Unknown"))
         
         return jsonify({
             "status": "success",
-            "pattern": detected_pattern,
-            "explanation": explanation
+            "pattern": result_data.get("pattern"),
+            "explanation": result_data.get("explanation"),
+            "questions": result_data.get("practice_questions", [])
         })
 
     except Exception as e:
-        print(f"Error during OpenRouter API execution loop: {e}")
-        return jsonify({"status": "error", "message": "Failed to connect or process with AI API."}), 500
-
-if __name__ == '__main__':
+        print(f"Error during execution: {e}")
+        return jsonify({"status": "error", "message": "Failed to parse or analyze code structure."}), 500
+# THIS MUST BE FLUSHED TO THE LEFT MARGIN BELOW ALL FUNCTIONS TO BOOT THE APP
+if __name__ == "__main__":
     app.run(debug=True)
