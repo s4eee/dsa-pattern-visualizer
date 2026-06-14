@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Pattern Discovery Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <header class="border-b border-gray-800 bg-gray-950 p-4 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-tight text-indigo-400">🧩 DSA Pattern Discovery Tool</h1>
+            <span class="text-xs bg-indigo-900/50 text-indigo-300 px-3 py-1 rounded-full border border-indigo-700">Powered by Flask & SQL</span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <section class="bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl flex flex-col justify-between">
+            <div>
+                <h2 class="text-lg font-semibold mb-2">Analyze Code Snippet</h2>
+                <p class="text-gray-400 text-sm mb-4">Paste your code algorithm below to decode its underlying DSA pattern.</p>
+                
+                <textarea id="codeArea" 
+                    class="w-full h-80 bg-gray-900 text-mono text-emerald-400 p-4 rounded-lg border border-gray-700 focus:outline-none focus:border-indigo-500 font-mono text-sm resize-none"
+                    placeholder="def find_max_sum(arr, k):&#10;    # Paste your logic here..."></textarea>
+            </div>
+            
+            <button id="analyzeBtn" 
+                class="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-4 rounded-lg transition-all shadow-lg active:scale-[0.99]">
+                Analyze with AI 🚀
+            </button>
+        </section>
+
+        <section class="flex flex-col gap-6">
+            
+            <div class="bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl min-h-[180px]">
+                <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-wider mb-2">Detected Pattern</h3>
+                <div id="patternResult" class="text-2xl font-bold text-gray-500 italic">No code analyzed yet</div>
+            </div>
+
+            <div class="bg-gray-950 border border-gray-800 rounded-xl p-6 shadow-xl flex-1">
+                <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-wider mb-2">AI Insights & Breakdown</h3>
+                <p id="explanationResult" class="text-gray-400 text-sm leading-relaxed">
+                    Submit code to see the step-by-step structural explanation, logic mapping, and optimization strategies.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const codeInput = document.getElementById('codeArea').value;
+            const patternDisplay = document.getElementById('patternResult');
+            const explanationDisplay = document.getElementById('explanationResult');
+            const btn = document.getElementById('analyzeBtn');
+
+            // UI UX: Simple loading state indicator
+            btn.innerText = "Analyzing Code...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: codeInput })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Update UI elements dynamically
+                    patternDisplay.innerText = data.pattern;
+                    patternDisplay.className = "text-3xl font-extrabold text-emerald-400 tracking-wide";
+                    explanationDisplay.innerText = data.explanation;
+                    explanationDisplay.className = "text-gray-200 text-sm leading-relaxed";
+                } else {
+                    alert(data.message || "Something went wrong.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Could not connect to backend server.");
+            } finally {
+                btn.innerText = "Analyze with AI 🚀";
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
